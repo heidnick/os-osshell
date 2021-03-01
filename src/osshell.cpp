@@ -8,49 +8,22 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <fstream>
+#include <iterator>
 
 #define MAXSTR 128
+std::vector<std::string> history;
 
-
+void readHist(int *hist_idx);
+void printHist(int start_idx);
+void clearHist();
+void writeHist();
+void addHist(char usr_command[10000]);
 void splitString(std::string text, char d, std::vector<std::string>& result);
 void vectorOfStringsToArrayOfCharArrays(std::vector<std::string>& list, char ***result);
 void freeArrayOfCharArrays(char **array, size_t array_length);
 
 int main (int argc, char **argv)
 {
-    // Repeat:
-    //  Print prompt for user input: "osshell> " (no newline)
-    //  Get user input for next command
-    //  If command is `exit` exit loop / quit program
-    //  If command is `history` print previous N commands
-    //  For all other commands, check if an executable by that name is in one of the PATH directories
-    //   If yes, execute it
-    //   If no, print error statement: "<command_name>: Error command not found" (do include newline)
-    
-
-    /*
-        cur_path   -> store env path, must add .c_str() when using cur_path as param for stat()
-        buf        -> pass as &buf as second param to stat()
-        found_path -> if 0, no path contains executable file, 1 vis versa
-        pid        -> if pid > 0 = parent, if pid = 0 = child
-    */
-   /*
-            Done:
-            Parse through env paths, appends '/filename' to cur_path
-            if stat() returns valid, set found_path to true and fork()
-            if inside child process, execv to execute user process.  ---> probably need error check for bad user params
-
-            To Do:
-            - error check for bad user params on execv
-            - create loop to reprompt user
-            - exit -> check if command_list_exec[0] is exit, then call exit(1)
-            - history -> create a history size 128 string array
-            - create printHist(int start)
-            - in same error check as exit, check for ./ executable files
-            - readHist() writeHist() functions for saving/reading from file
-            - what happens when we get new commands? probably need to keep an index of oldest/most recent for history array
-            - on history clear, should initialize all to NULL?
-        */
     // Get list of paths to binary executables
     std::vector<std::string> os_path_list;
     char* os_path = getenv("PATH");
@@ -63,34 +36,21 @@ int main (int argc, char **argv)
     char **command_list_exec; // command_list converted to an array of character arrays
 
     //Initializing history array
-    std::vector<std::string> file_history;
-    std::vector<std::string> history;
-    std::ifstream in("../tests/input/test.txt");
-    std::stringstream buffer;
-    buffer << in.rdbuf();
-    std::string test = buffer.str();
-    splitString(test, '\n', file_history);
-    int start_hist_idx = 0;
-    if (file_history.size() > 128){
-        start_hist_idx = file_history.size() - 128;
-    }
+    int cur_hist_idx;
+    readHist(&cur_hist_idx);
+    //printHist(0);
     
-    int i = 0;
-    for (int k=start_hist_idx; k<5; k++){
-
-        history.push_back(file_history[k]);
-        i++;
-    }
-
-    for(i=0; i<history.size(); i++){
-        std::cout << history[i] << std::endl;
-    }
-
+    //std::cout << "cur_hist_idx = " << cur_hist_idx << std::endl;
+    
+    
+    int i;
+    //begin argument search
     while(true){
         int has_arg = 0;
+        char usr_command[10000];
         while(has_arg == 0) {
             std::cout << "osshell> ";
-            char usr_command[100];
+            
 
             std::cin.getline(usr_command, sizeof(usr_command));
            
@@ -107,8 +67,8 @@ int main (int argc, char **argv)
 
         if (first_command == "exit"){
             std::cout << "exit runs" << std::endl;
-            //history[hist_idx] = command_list_exec[0];
-            //hist_idx++;
+            addHist(usr_command);
+            writeHist();
             exit(1);
         }
         else if (first_command.at(0) == '.'){
@@ -131,6 +91,27 @@ int main (int argc, char **argv)
                     int status;
                     waitpid(pid, &status, 0);
                 }
+                addHist(usr_command);
+
+            }
+        }else if(first_command == "history"){
+            if (command_list.size() == 2){
+                std::string arg = command_list_exec[1];
+                if (arg == "clear") {
+                    clearHist();
+                }else if (atoi(command_list_exec[1]) >= 0){
+                    printHist(atoi(command_list_exec[1]));
+                    addHist(usr_command);
+                }else {
+                    std::cout << "Error: history expects an integer > 0 (or 'clear')" << std::endl;
+                    addHist(usr_command);
+                }
+            }else if (command_list.size() == 1){
+                printHist(0);
+                addHist(usr_command);
+            }else {
+                std::cout << "Error: history expects an integer > 0 (or 'clear')" << std::endl;
+                addHist(usr_command);
             }
         }
         else {
@@ -138,17 +119,7 @@ int main (int argc, char **argv)
             struct stat buf;
             int found_path = 0;
             pid_t pid;
-            
-            //Uncomment to print cmd line
-            /*
-            int j = 0;
-            while (command_list_exec[j] != NULL)
-            {
-                std::cout << command_list_exec[j] << std::endl;
-                j++;
-            }
-            */
-
+            addHist(usr_command);
             
             for (i = 0; i < os_path_list.size(); i++){
                 cur_path = os_path_list[i].c_str();
@@ -156,10 +127,8 @@ int main (int argc, char **argv)
                 cur_path += command_list_exec[0];
                 if (stat(cur_path.c_str(), &buf) == 0 && found_path == 0) {
                     found_path = 1;
-                    std::cout << cur_path << std::endl;
                     pid = fork();
                     if (pid == 0) {
-                        printf("child spawned\n");
                         execv(cur_path.c_str(), command_list_exec);
                     }
                     else {
@@ -176,6 +145,52 @@ int main (int argc, char **argv)
     }
     return 0;
 }
+
+void readHist(int *hist_idx){
+    std::vector<std::string> file_history;
+    std::ifstream in("../tests/input/history.txt");
+    std::stringstream buffer;
+    buffer << in.rdbuf();
+    std::string test = buffer.str();
+    splitString(test, '\n', file_history);
+    int start_hist_idx = 0;
+    *hist_idx = file_history.size();
+    
+    int i = 0;
+    for (int k=start_hist_idx; k<file_history.size(); k++){
+        history.push_back(file_history[k]);
+        i++;
+    }
+
+    
+}
+
+void printHist(int start_idx){
+    int i;
+    for(i=start_idx; i<history.size(); i++){
+        std::cout << "  " << i+1 << ": " << history[i] << std::endl;
+    }
+}
+
+void clearHist(){
+    while (history.size() > 0){
+        history.erase(history.begin());
+    }
+}
+
+void writeHist() {
+    std::ofstream output_file("../tests/input/history.txt");
+    std::ostream_iterator<std::string> output_iterator(output_file, "\n");
+    std::copy(history.begin(), history.end(), output_iterator);
+}
+
+void addHist(char usr_command[10000]) {
+    if (history.size() == 128){
+        history.erase(history.begin());
+    }
+    history.push_back(usr_command);
+}
+
 
 /*
    text: string to split
