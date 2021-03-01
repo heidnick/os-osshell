@@ -63,15 +63,28 @@ int main (int argc, char **argv)
     char **command_list_exec; // command_list converted to an array of character arrays
 
     //Initializing history array
+    std::vector<std::string> file_history;
     std::vector<std::string> history;
     std::ifstream in("../tests/input/test.txt");
     std::stringstream buffer;
     buffer << in.rdbuf();
     std::string test = buffer.str();
-    splitString(test, '\n', history);
-    int hist_idx = history.size();
+    splitString(test, '\n', file_history);
+    int start_hist_idx = 0;
+    if (file_history.size() > 128){
+        start_hist_idx = file_history.size() - 128;
+    }
+    
+    int i = 0;
+    for (int k=start_hist_idx; k<5; k++){
 
-    std::cout << hist_idx << std::endl;
+        history.push_back(file_history[k]);
+        i++;
+    }
+
+    for(i=0; i<history.size(); i++){
+        std::cout << history[i] << std::endl;
+    }
 
     while(true){
         int has_arg = 0;
@@ -95,11 +108,30 @@ int main (int argc, char **argv)
         if (first_command == "exit"){
             std::cout << "exit runs" << std::endl;
             //history[hist_idx] = command_list_exec[0];
-            hist_idx++;
+            //hist_idx++;
             exit(1);
         }
         else if (first_command.at(0) == '.'){
             std::cout << "execuatable program" << std::endl;
+
+            /*pid_t pid = fork();
+            if (pid == 0) {
+                int 
+            }*/
+
+        }else if(first_command.at(0) == '/'){
+            struct stat buf;
+            if (stat(first_command.c_str(), &buf) == 0){
+                pid_t pid = fork();
+                if (pid == 0) {
+                    printf("child spawned\n");
+                    execv(first_command.c_str(), command_list_exec);
+                }
+                else {
+                    int status;
+                    waitpid(pid, &status, 0);
+                }
+            }
         }
         else {
             std::string cur_path;
@@ -118,7 +150,7 @@ int main (int argc, char **argv)
             */
 
             
-            for (int i = 0; i < os_path_list.size(); i++){
+            for (i = 0; i < os_path_list.size(); i++){
                 cur_path = os_path_list[i].c_str();
                 cur_path += "/";
                 cur_path += command_list_exec[0];
@@ -129,10 +161,10 @@ int main (int argc, char **argv)
                     if (pid == 0) {
                         printf("child spawned\n");
                         execv(cur_path.c_str(), command_list_exec);
-                        exit(0);
                     }
-                    else if (pid > 0) {
-                        wait(NULL);
+                    else {
+                        int status;
+                        waitpid(pid, &status, 0);
                     }
                 }
             }
