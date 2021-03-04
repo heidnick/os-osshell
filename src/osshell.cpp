@@ -9,6 +9,12 @@
 #include <sys/wait.h>
 #include <fstream>
 #include <iterator>
+#include <unistd.h>
+#include <stdio.h>
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <ctype.h>
 
 #define MAXSTR 128
 std::vector<std::string> history;
@@ -46,6 +52,7 @@ int main (int argc, char **argv)
     int i;
     //begin argument search
     while(true){
+        int hist_cleared = 0;
         int has_arg = 0;
         char usr_command[10000];
         while(has_arg == 0) {
@@ -61,66 +68,66 @@ int main (int argc, char **argv)
             }    
         }
         
-        std::string first_command = command_list_exec[0];
-        
+        std::string first_command = command_list_exec[0];        
 
 
         if (first_command == "exit"){
-            std::cout << "exit runs" << std::endl;
             addHist(usr_command);
+            std::cout << std::endl;
             writeHist();
             exit(1);
         }
-        else if (first_command.at(0) == '.'){
-            std::cout << "execuatable program" << std::endl;
-
-            /*pid_t pid = fork();
-            if (pid == 0) {
-                int 
-            }*/
-
-        }else if(first_command.at(0) == '/'){
+        else if (first_command.at(0) == '.' || first_command.at(0) == '/'){            
             struct stat buf;
             if (stat(first_command.c_str(), &buf) == 0){
                 pid_t pid = fork();
                 if (pid == 0) {
-                    printf("child spawned\n");
+                    //printf("child spawned\n");
                     execv(first_command.c_str(), command_list_exec);
                 }
                 else {
                     int status;
                     waitpid(pid, &status, 0);
                 }
-                addHist(usr_command);
-
+            }else{
+                std::cout << usr_command << ": " << "Error command not found" << std::endl;
             }
+
         }else if(first_command == "history"){
             if (command_list.size() == 2){
                 std::string arg = command_list_exec[1];
                 if (arg == "clear") {
+                    hist_cleared = 1;
                     clearHist();
                 }else if (atoi(command_list_exec[1]) >= 0){
-                    printHist(atoi(command_list_exec[1]));
-                    addHist(usr_command);
+                    //std::cout << command_list_exec[1] << " " << isdigit(command_list_exec[1]) << std::endl;
+                    int flag=0;
+                    std::string f_cmnd = command_list_exec[1];
+                    for (i=0; i < f_cmnd.length(); i++){
+                        if (!isdigit(f_cmnd.at(i))){
+                            flag = 1;
+                        }
+                    }
+                    if (!flag){
+                        int start = history.size() - atoi(command_list_exec[1]);
+                        printHist(start);
+                    }else{
+                        std::cout << "Error: history expects an integer > 0 (or 'clear')" << std::endl;
+                    }
                 }else {
                     std::cout << "Error: history expects an integer > 0 (or 'clear')" << std::endl;
-                    addHist(usr_command);
                 }
             }else if (command_list.size() == 1){
                 printHist(0);
-                addHist(usr_command);
             }else {
                 std::cout << "Error: history expects an integer > 0 (or 'clear')" << std::endl;
-                addHist(usr_command);
             }
         }
         else {
             std::string cur_path;
             struct stat buf;
             int found_path = 0;
-            pid_t pid;
-            addHist(usr_command);
-            
+            pid_t pid;            
             for (i = 0; i < os_path_list.size(); i++){
                 cur_path = os_path_list[i].c_str();
                 cur_path += "/";
@@ -138,9 +145,12 @@ int main (int argc, char **argv)
                 }
             }
             if (found_path == 0) {
-                std::cout << "Error command not found" << std::endl;
+                std::cout << usr_command << ": "<< "Error command not found" << std::endl;
             }
             freeArrayOfCharArrays(command_list_exec, command_list.size() + 1);
+        }
+        if (!hist_cleared){
+            addHist(usr_command);
         }    
     }
     return 0;
@@ -148,7 +158,7 @@ int main (int argc, char **argv)
 
 void readHist(int *hist_idx){
     std::vector<std::string> file_history;
-    std::ifstream in("../tests/input/history.txt");
+    std::ifstream in("./tests/input/history.txt");
     std::stringstream buffer;
     buffer << in.rdbuf();
     std::string test = buffer.str();
@@ -166,6 +176,7 @@ void readHist(int *hist_idx){
 }
 
 void printHist(int start_idx){
+
     int i;
     for(i=start_idx; i<history.size(); i++){
         std::cout << "  " << i+1 << ": " << history[i] << std::endl;
@@ -179,7 +190,7 @@ void clearHist(){
 }
 
 void writeHist() {
-    std::ofstream output_file("../tests/input/history.txt");
+    std::ofstream output_file("./tests/input/history.txt");
     std::ostream_iterator<std::string> output_iterator(output_file, "\n");
     std::copy(history.begin(), history.end(), output_iterator);
 }
